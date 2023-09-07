@@ -1,6 +1,6 @@
 project:
   owner: quickstart-eng@amazon.com
-  name: quickstart-microsoft-pki
+  name: cfn-ps-microsoft-pki
   package_lambda: false
   regions:
   - ap-northeast-1
