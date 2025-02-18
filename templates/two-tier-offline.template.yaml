@@ -1,149 +1,140 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Two-tier PKI infrastructure for air-gapped environments (qs-1qup6s5k1)'
+Description: 'Two-tier PKI infrastructure for air-gapped environments'
 
 Parameters:
-  AdcaInstanceType:
-    AllowedValues:
-      - t3.medium
-      - t3.large
-      - t3.xlarge
-      - t3.2xlarge
-      - m5.large
-      - m5.xlarge
-      - m5.2xlarge
-      - m5.4xlarge
-    Default: m5.xlarge
-    Description: Amazon EC2 instance type for the first Active Directory server
-    Type: String
-  SubcaInstanceType:
-    AllowedValues:
-      - t3.medium
-      - t3.large
-      - t3.xlarge
-      - t3.2xlarge
-      - m5.large
-      - m5.xlarge
-      - m5.2xlarge
-      - m5.4xlarge
-    Default: m5.xlarge
-    Description: Amazon EC2 instance type for the second Active Directory server
-    Type: String
-  AdcaServerNetBIOSName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: ADCA1
-    Description: NetBIOS name of the root CA server (up to 15 characters)
-    MaxLength: '15'
-    MinLength: '1'
-    Type: String
-  SubcaServerNetBIOSName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: SUBCA1
-    Description: NetBIOS name of the subordinate CA server (up to 15 characters)
-    MaxLength: '15'
-    MinLength: '1'
-    Type: String
-  DomainDNSName:
-    AllowedPattern: '[a-zA-Z0-9\-]+\..+'
-    Default: example.com
-    Description: Fully qualified domain name (FQDN) of the forest root domain
-    MaxLength: '255'
-    MinLength: '2'
-    Type: String
-  DomainNetBIOSName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: EXAMPLE
-    Description: NetBIOS name of the domain (up to 15 characters)
-    MaxLength: '15'
-    MinLength: '1'
-    Type: String
-  DomainAdminUser:
-    AllowedPattern: '[a-zA-Z0-9]*'
-    Default: Admin
-    Description: User name for the account that will be added as Domain Administrator. This
-      is separate from the default "Administrator" account
-    MaxLength: '25'
-    MinLength: '5'
-    Type: String
-  DomainAdminPassword:
-    AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
-    Description: Password for the domain admin user. Must be at least 8 characters containing
-      letters, numbers and symbols
-    MaxLength: '32'
-    MinLength: '8'
-    NoEcho: 'true'
-    Type: String
   VPCID:
-    Description: ID of the VPC (e.g., vpc-0343606e)
     Type: AWS::EC2::VPC::Id
-  SubnetID:
-    Description: ID of the subnet where the PKI infrastructure will be deployed (e.g., subnet-a0246dcd)
+    Description: ID of the VPC (e.g., vpc-0343606e)
+
+  PrivateSubnet1ID:
     Type: AWS::EC2::Subnet::Id
+    Description: ID of the first private subnet for the PKI infrastructure
+
+  PrivateSubnet2ID:
+    Type: AWS::EC2::Subnet::Id
+    Description: ID of the second private subnet for the PKI infrastructure
+
   DomainMemberSGID:
-    Description: ID of the Domain Member Security Group (e.g., sg-7f16e910)
     Type: AWS::EC2::SecurityGroup::Id
-  OrganizationalUnitName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: CorpInfra
-    Description: Name of the Organizational Unit under which the PKI servers will be placed
-    MaxLength: '25'
-    MinLength: '1'
+    Description: ID of the Domain Member Security Group
+
+  DomainDNSName:
     Type: String
+    AllowedPattern: '[a-zA-Z0-9\-]+\..+'
+    Description: Fully qualified domain name (FQDN) of the forest root domain
+
+  DomainNetBIOSName:
+    Type: String
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Description: NetBIOS name of the domain (up to 15 characters)
+
+  OrCANetBIOSName:
+    Type: String
+    Default: ORCA
+    Description: NetBIOS name of the Offline Root CA server
+
+  SubCA1NetBIOSName:
+    Type: String
+    Default: SUBCA1
+    Description: NetBIOS name of the first Subordinate CA server
+
+  SubCA2NetBIOSName:
+    Type: String
+    Default: SUBCA2
+    Description: NetBIOS name of the second Subordinate CA server
+
+  ADServer1PrivateIP:
+    Type: String
+    Description: Primary Domain Controller IP
+
+  ADServer2PrivateIP:
+    Type: String
+    Description: Secondary Domain Controller IP
+
+  ADAdminSecretArn:
+    Type: String
+    Description: ARN of the Secret containing AD Admin credentials
+
+  WindowsServerAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base
+    Description: Windows Server AMI to use for CA servers
+
   CaKeyLength:
+    Type: String
     AllowedValues:
       - '2048'
       - '4096'
     Default: '2048'
-    Description: Key length for CA certificates (2048 or 4096 bits)
-    Type: String
+    Description: Key length for CA certificates
+
   CaHashAlgorithm:
+    Type: String
     AllowedValues:
       - SHA256
       - SHA384
       - SHA512
     Default: SHA256
-    Description: Hash algorithm for CA certificates (SHA256, SHA384, or SHA512)
-    Type: String
+    Description: Hash algorithm for CA certificates
+
   CaValidityPeriodUnits:
-    Description: Validity period for CA certificates (in years)
-    Default: '5'
+    Type: Number
+    Default: 5
+    Description: Validity period for Subordinate CA certificates (in years)
+
+  OrCaValidityPeriodUnits:
+    Type: Number
+    Default: 10
+    Description: Validity period for Root CA certificate (in years)
+
+  UseS3ForCRL:
     Type: String
-  EnableAdvancedAuditing:
     AllowedValues:
-      - 'true'
-      - 'false'
-    Default: 'false'
-    Description: Enable advanced auditing
+      - 'Yes'
+      - 'No'
+    Default: 'No'
+    Description: Use S3 for CRL distribution
+
+  S3CRLBucketName:
     Type: String
-  AssetsBucket:
+    Description: S3 bucket name for CRL distribution
+
+  QSS3BucketName:
+    Type: String
     AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
-    Default: aws-quickstart
-    Description: S3 bucket name for the Quick Start assets. Quick Start bucket name can include
-      numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or
-      end with a hyphen (-).
-    Type: String
-  AssetsPrefix:
-    AllowedPattern: ^[0-9a-zA-Z-/]*$
-    Default: quickstart-microsoft-pki/
-    Description: S3 key prefix for the Quick Start assets. Quick Start key prefix can include
-      numbers, lowercase letters, uppercase letters, hyphens (-), and forward slash (/).
-    Type: String
+    Description: Name of the S3 bucket for your copy of the Quick Start assets
+
   QSS3BucketRegion:
-    Default: 'us-east-1'
-    Description: The AWS Region where the Quick Start S3 bucket (QSS3BucketName) is hosted. When using your own bucket, you must specify this value.
     Type: String
-Mappings:
-  AWSAMIRegionMap:
-    us-east-1:
-      WS2022FULLBASE: ami-0c2b0d3fb02824d92
-    us-east-2:
-      WS2022FULLBASE: ami-0fb8234821e6802fd
-    us-west-1:
-      WS2022FULLBASE: ami-0ea7dc624e77a15d5
-    us-west-2:
-      WS2022FULLBASE: ami-0d77c9d087c0aa0f0
+    Default: us-east-1
+    Description: Region where the Quick Start S3 bucket exists
+
+  QSS3KeyPrefix:
+    Type: String
+    AllowedPattern: ^([0-9a-zA-Z-.]+/)*$
+    Description: S3 key prefix for the Quick Start assets
+
+  EbsEncryptionKmsKeyId:
+    Type: String
+    Default: ''
+    Description: ID or ARN of a KMS key for EBS encryption
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 key pair
+
+Conditions:
+  UseS3CRL: !Equals 
+    - !Ref UseS3ForCRL
+    - 'Yes'
+
+  HasKmsKey: !Not 
+    - !Equals 
+      - !Ref EbsEncryptionKmsKeyId
+      - ''
 
 Resources:
-  RootCARole:
+  OfflineRootCARole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -162,27 +153,16 @@ Resources:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - s3:GetObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::${AssetsBucket}/${AssetsPrefix}*
-        - PolicyName: JoinDomain
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*
+        - PolicyName: SecretsAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - ds:CreateComputer
-                  - ds:DescribeDirectories
-                Resource: '*'
-
-  RootCAInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref RootCARole
-
-  SubCARole:
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref ADAdminSecretArn
+  SubordinateCARole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -201,389 +181,425 @@ Resources:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - s3:GetObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::${AssetsBucket}/${AssetsPrefix}*
-        - PolicyName: JoinDomain
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*
+        - PolicyName: SecretsAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - ds:CreateComputer
-                  - ds:DescribeDirectories
-                Resource: '*'
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref ADAdminSecretArn
+        - !If
+          - UseS3CRL
+          - PolicyName: S3CRLAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                    - s3:DeleteObject
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${S3CRLBucketName}/*
+          - !Ref AWS::NoValue
 
-  SubCAInstanceProfile:
+  OfflineRootCAInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Path: /
       Roles:
-        - !Ref SubCARole
+        - !Ref OfflineRootCARole
 
-  RootCASecurityGroup:
+  SubordinateCAInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SubordinateCARole
+
+  PKISecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Root CA Security Group
+      GroupDescription: Security group for PKI servers
       VpcId: !Ref VPCID
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 3389
-          ToPort: 3389
-          SourceSecurityGroupId: !Ref DomainMemberSGID
-        - IpProtocol: tcp
           FromPort: 135
           ToPort: 135
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
           SourceSecurityGroupId: !Ref DomainMemberSGID
         - IpProtocol: tcp
           FromPort: 49152
           ToPort: 65535
           SourceSecurityGroupId: !Ref DomainMemberSGID
         - IpProtocol: tcp
-          FromPort: 445
-          ToPort: 445
+          FromPort: 389
+          ToPort: 389
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 636
+          ToPort: 636
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 3268
+          ToPort: 3269
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 88
+          ToPort: 88
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: udp
+          FromPort: 88
+          ToPort: 88
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 5985
+          ToPort: 5986
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref DomainMemberSGID
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
           SourceSecurityGroupId: !Ref DomainMemberSGID
       SecurityGroupEgress:
         - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-RootCA-SG
+          Value: PKISecurityGroup
 
-  SubCASecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Subordinate CA Security Group
-      VpcId: !Ref VPCID
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3389
-          ToPort: 3389
-          SourceSecurityGroupId: !Ref DomainMemberSGID
-        - IpProtocol: tcp
-          FromPort: 135
-          ToPort: 135
-          SourceSecurityGroupId: !Ref DomainMemberSGID
-        - IpProtocol: tcp
-          FromPort: 49152
-          ToPort: 65535
-          SourceSecurityGroupId: !Ref DomainMemberSGID
-        - IpProtocol: tcp
-          FromPort: 445
-          ToPort: 445
-          SourceSecurityGroupId: !Ref DomainMemberSGID
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-SubCA-SG
-  RootCAWaitHandle:
-    Type: AWS::CloudFormation::WaitConditionHandle
-
-  RootCAWaitCondition:
-    Type: AWS::CloudFormation::WaitCondition
-    DependsOn: RootCAInstance
-    Properties:
-      Handle: !Ref RootCAWaitHandle
-      Timeout: '3600'
-      Count: 1
-
-  SubCAWaitHandle:
-    Type: AWS::CloudFormation::WaitConditionHandle
-
-  SubCAWaitCondition:
-    Type: AWS::CloudFormation::WaitCondition
-    DependsOn: SubCAInstance
-    Properties:
-      Handle: !Ref SubCAWaitHandle
-      Timeout: '3600'
-      Count: 1
-
-  RootCAInstance:
+  OfflineRootCA:
     Type: AWS::EC2::Instance
     Metadata:
-      AWS::CloudFormation::Init:
-        configSets:
-          default:
-            - setup
-            - join
-            - configure
-        setup:
-          files:
-            'C:\cfn\scripts\Initialize-RootCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Initialize-RootCA.ps1
-            'C:\cfn\scripts\Join-Domain.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Join-Domain.ps1
-            'C:\cfn\scripts\Configure-RootCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Configure-RootCA.ps1
-          commands:
-            1-initialize-ca:
-              command: powershell -Command "C:\cfn\scripts\Initialize-RootCA.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        join:
-          commands:
-            1-join-domain:
-              command: powershell -Command "C:\cfn\scripts\Join-Domain.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        configure:
-          commands:
-            1-configure-ca:
-              command: powershell -Command "C:\cfn\scripts\Configure-RootCA.ps1"
-              waitAfterCompletion: 0
-            2-signal-success:
-              command: !Sub cfn-signal.exe -e %ERRORLEVEL% --stack ${AWS::StackName} --resource RootCAWaitCondition --region ${AWS::Region}
-              waitAfterCompletion: 0
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref OfflineRootCARole
+          buckets:
+            - !Ref QSS3BucketName
     Properties:
-      ImageId: !FindInMap 
-        - AWSAMIRegionMap
-        - !Ref AWS::Region
-        - WS2022FULLBASE
-      InstanceType: !Ref AdcaInstanceType
-      SubnetId: !Ref SubnetID
-      IamInstanceProfile: !Ref RootCAInstanceProfile
-      SecurityGroupIds: 
-        - !Ref RootCASecurityGroup
+      ImageId: !Ref WindowsServerAMI
+      InstanceType: t3.medium
+      SubnetId: !Ref PrivateSubnet1ID
+      IamInstanceProfile: !Ref OfflineRootCAInstanceProfile
+      SecurityGroupIds:
+        - !Ref PKISecurityGroup
         - !Ref DomainMemberSGID
+      KeyName: !Ref KeyPairName
       Tags:
         - Key: Name
-          Value: !Ref AdcaServerNetBIOSName
-      UserData:
-        Fn::Base64:
-          Fn::Join:
-            - ''
-            - - "<powershell>\n"
-              - "# Set required environment variables\n"
-              - !Sub "$env:COMPUTERNAME = '${AdcaServerNetBIOSName}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_USER = '${DomainAdminUser}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_PASSWORD = '${DomainAdminPassword}'\n"
-              - !Sub "$env:DOMAIN_DNS_NAME = '${DomainDNSName}'\n"
-              - !Sub "$env:DOMAIN_NETBIOS_NAME = '${DomainNetBIOSName}'\n"
-              - !Sub "$env:CA_KEY_LENGTH = '${CaKeyLength}'\n"
-              - !Sub "$env:CA_HASH_ALGORITHM = '${CaHashAlgorithm}'\n"
-              - !Sub "$env:CA_VALIDITY_PERIOD = '${CaValidityPeriodUnits}'\n"
-              - !Sub "$env:OU_NAME = '${OrganizationalUnitName}'\n"
-              - !Sub "$env:ENABLE_ADVANCED_AUDITING = '${EnableAdvancedAuditing}'\n"
-              - "\n"
-              - "# Create required directories\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\scripts'\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\log'\n"
-              - "\n"
-              - "# Initialize CFN\n"
-              - !Sub "cfn-init.exe -v --stack ${AWS::StackName} --resource RootCAInstance --configsets default --region ${AWS::Region}\n"
-              - "</powershell>\n"
-  RootCAWaitHandle:
+          Value: !Ref OrCANetBIOSName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100
+            VolumeType: gp3
+            Encrypted: true
+            KmsKeyId: !If [HasKmsKey, !Ref EbsEncryptionKmsKeyId, !Ref 'AWS::NoValue']
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "<powershell>\n"
+            - !Sub |
+                $ErrorActionPreference = "Stop"
+                Start-Transcript -Path C:\cfn\log\userdata.log -Append
+
+                # Download required scripts
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Join-Domain.ps1 -File C:\cfn\scripts\Join-Domain.ps1
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Configure-ORCA.ps1 -File C:\cfn\scripts\Configure-ORCA.ps1
+
+                # Join domain
+                & C:\cfn\scripts\Join-Domain.ps1 -DomainName ${DomainDNSName} -DomainNetBIOSName ${DomainNetBIOSName}
+
+                # Configure Offline Root CA
+                & C:\cfn\scripts\Configure-ORCA.ps1 -CACommonName "${DomainDNSName} Offline Root CA" -ValidityPeriodUnits ${OrCaValidityPeriodUnits} -KeyLength ${CaKeyLength} -HashAlgorithm ${CaHashAlgorithm}
+            - "</powershell>\n"
+  SubCA1:
+    Type: AWS::EC2::Instance
+    DependsOn: OfflineRootCA
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref SubordinateCARole
+          buckets:
+            - !Ref QSS3BucketName
+    Properties:
+      ImageId: !Ref WindowsServerAMI
+      InstanceType: t3.medium
+      SubnetId: !Ref PrivateSubnet1ID
+      IamInstanceProfile: !Ref SubordinateCAInstanceProfile
+      SecurityGroupIds:
+        - !Ref PKISecurityGroup
+        - !Ref DomainMemberSGID
+      KeyName: !Ref KeyPairName
+      Tags:
+        - Key: Name
+          Value: !Ref SubCA1NetBIOSName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100
+            VolumeType: gp3
+            Encrypted: true
+            KmsKeyId: !If [HasKmsKey, !Ref EbsEncryptionKmsKeyId, !Ref 'AWS::NoValue']
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "<powershell>\n"
+            - !Sub |
+                $ErrorActionPreference = "Stop"
+                Start-Transcript -Path C:\cfn\log\userdata.log -Append
+
+                # Download required scripts
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Join-Domain.ps1 -File C:\cfn\scripts\Join-Domain.ps1
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Configure-SubCA.ps1 -File C:\cfn\scripts\Configure-SubCA.ps1
+
+                # Join domain
+                & C:\cfn\scripts\Join-Domain.ps1 -DomainName ${DomainDNSName} -DomainNetBIOSName ${DomainNetBIOSName}
+
+                # Configure Subordinate CA
+                & C:\cfn\scripts\Configure-SubCA.ps1 `
+                    -CACommonName "${DomainDNSName} Enterprise Subordinate CA 1" `
+                    -ValidityPeriodUnits ${CaValidityPeriodUnits} `
+                    -KeyLength ${CaKeyLength} `
+                    -HashAlgorithm ${CaHashAlgorithm} `
+                    -UseS3ForCRL ${UseS3ForCRL} `
+                    -S3CRLBucketName ${S3CRLBucketName}
+            - "</powershell>\n"
+
+  SubCA2:
+    Type: AWS::EC2::Instance
+    DependsOn: SubCA1
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref SubordinateCARole
+          buckets:
+            - !Ref QSS3BucketName
+    Properties:
+      ImageId: !Ref WindowsServerAMI
+      InstanceType: t3.medium
+      SubnetId: !Ref PrivateSubnet2ID
+      IamInstanceProfile: !Ref SubordinateCAInstanceProfile
+      SecurityGroupIds:
+        - !Ref PKISecurityGroup
+        - !Ref DomainMemberSGID
+      KeyName: !Ref KeyPairName
+      Tags:
+        - Key: Name
+          Value: !Ref SubCA2NetBIOSName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100
+            VolumeType: gp3
+            Encrypted: true
+            KmsKeyId: !If [HasKmsKey, !Ref EbsEncryptionKmsKeyId, !Ref 'AWS::NoValue']
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "<powershell>\n"
+            - !Sub |
+                $ErrorActionPreference = "Stop"
+                Start-Transcript -Path C:\cfn\log\userdata.log -Append
+
+                # Download required scripts
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Join-Domain.ps1 -File C:\cfn\scripts\Join-Domain.ps1
+                Read-S3Object -BucketName ${QSS3BucketName} -Key ${QSS3KeyPrefix}scripts/Configure-SubCA.ps1 -File C:\cfn\scripts\Configure-SubCA.ps1
+
+                # Join domain
+                & C:\cfn\scripts\Join-Domain.ps1 -DomainName ${DomainDNSName} -DomainNetBIOSName ${DomainNetBIOSName}
+
+                # Configure Subordinate CA
+                & C:\cfn\scripts\Configure-SubCA.ps1 `
+                    -CACommonName "${DomainDNSName} Enterprise Subordinate CA 2" `
+                    -ValidityPeriodUnits ${CaValidityPeriodUnits} `
+                    -KeyLength ${CaKeyLength} `
+                    -HashAlgorithm ${CaHashAlgorithm} `
+                    -UseS3ForCRL ${UseS3ForCRL} `
+                    -S3CRLBucketName ${S3CRLBucketName}
+            - "</powershell>\n"
+
+  ConfigureORCASsm:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      Content:
+        schemaVersion: '2.2'
+        description: 'SSM Document for Offline Root CA configuration'
+        parameters:
+          CACommonName:
+            type: String
+            description: Common name for the Root CA
+          ValidityPeriodUnits:
+            type: String
+            description: Validity period in years
+          KeyLength:
+            type: String
+            description: Key length (2048 or 4096)
+          HashAlgorithm:
+            type: String
+            description: Hash algorithm
+        mainSteps:
+          - action: aws:runPowerShellScript
+            name: ConfigureORCA
+            inputs:
+              runCommand:
+                - |
+                  $ErrorActionPreference = "Stop"
+                  Start-Transcript -Path C:\cfn\log\configure-orca.log -Append
+                  
+                  # Configure Offline Root CA
+                  & C:\cfn\scripts\Configure-ORCA.ps1 `
+                      -CACommonName '{{ CACommonName }}' `
+                      -ValidityPeriodUnits {{ ValidityPeriodUnits }} `
+                      -KeyLength {{ KeyLength }} `
+                      -HashAlgorithm {{ HashAlgorithm }}
+  ConfigureSubCASsm:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      Content:
+        schemaVersion: '2.2'
+        description: 'SSM Document for Subordinate CA configuration'
+        parameters:
+          CACommonName:
+            type: String
+            description: Common name for the Subordinate CA
+          ValidityPeriodUnits:
+            type: String
+            description: Validity period in years
+          KeyLength:
+            type: String
+            description: Key length (2048 or 4096)
+          HashAlgorithm:
+            type: String
+            description: Hash algorithm
+          UseS3ForCRL:
+            type: String
+            description: Use S3 for CRL distribution
+          S3CRLBucketName:
+            type: String
+            description: S3 bucket name for CRL distribution
+        mainSteps:
+          - action: aws:runPowerShellScript
+            name: ConfigureSubCA
+            inputs:
+              runCommand:
+                - |
+                  $ErrorActionPreference = "Stop"
+                  Start-Transcript -Path C:\cfn\log\configure-subca.log -Append
+                  
+                  # Configure Subordinate CA
+                  & C:\cfn\scripts\Configure-SubCA.ps1 `
+                      -CACommonName '{{ CACommonName }}' `
+                      -ValidityPeriodUnits {{ ValidityPeriodUnits }} `
+                      -KeyLength {{ KeyLength }} `
+                      -HashAlgorithm {{ HashAlgorithm }} `
+                      -UseS3ForCRL {{ UseS3ForCRL }} `
+                      -S3CRLBucketName {{ S3CRLBucketName }}
+
+  WaitForORCA:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: OfflineRootCA
+    Properties:
+      Handle: !Ref WaitForORCAHandle
+      Timeout: '3600'
+      Count: '1'
+
+  WaitForORCAHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
 
-  RootCAWaitCondition:
+  WaitForSubCA1:
     Type: AWS::CloudFormation::WaitCondition
-    DependsOn: RootCAInstance
+    DependsOn: SubCA1
     Properties:
-      Handle: !Ref RootCAWaitHandle
+      Handle: !Ref WaitForSubCA1Handle
       Timeout: '3600'
-      Count: 1
+      Count: '1'
 
-  SubCAWaitHandle:
+  WaitForSubCA1Handle:
     Type: AWS::CloudFormation::WaitConditionHandle
 
-  SubCAWaitCondition:
+  WaitForSubCA2:
     Type: AWS::CloudFormation::WaitCondition
-    DependsOn: SubCAInstance
+    DependsOn: SubCA2
     Properties:
-      Handle: !Ref SubCAWaitHandle
+      Handle: !Ref WaitForSubCA2Handle
       Timeout: '3600'
-      Count: 1
+      Count: '1'
 
-  RootCAInstance:
-    Type: AWS::EC2::Instance
-    Metadata:
-      AWS::CloudFormation::Init:
-        configSets:
-          default:
-            - setup
-            - join
-            - configure
-        setup:
-          files:
-            'C:\cfn\scripts\Initialize-RootCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Initialize-RootCA.ps1
-            'C:\cfn\scripts\Join-Domain.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Join-Domain.ps1
-            'C:\cfn\scripts\Configure-RootCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Configure-RootCA.ps1
-          commands:
-            1-initialize-ca:
-              command: powershell -Command "C:\cfn\scripts\Initialize-RootCA.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        join:
-          commands:
-            1-join-domain:
-              command: powershell -Command "C:\cfn\scripts\Join-Domain.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        configure:
-          commands:
-            1-configure-ca:
-              command: powershell -Command "C:\cfn\scripts\Configure-RootCA.ps1"
-              waitAfterCompletion: 0
-            2-signal-success:
-              command: !Sub cfn-signal.exe -e %ERRORLEVEL% --stack ${AWS::StackName} --resource RootCAWaitCondition --region ${AWS::Region}
-              waitAfterCompletion: 0
-    Properties:
-      ImageId: !FindInMap 
-        - AWSAMIRegionMap
-        - !Ref AWS::Region
-        - WS2022FULLBASE
-      InstanceType: !Ref AdcaInstanceType
-      SubnetId: !Ref SubnetID
-      IamInstanceProfile: !Ref RootCAInstanceProfile
-      SecurityGroupIds: 
-        - !Ref RootCASecurityGroup
-        - !Ref DomainMemberSGID
-      Tags:
-        - Key: Name
-          Value: !Ref AdcaServerNetBIOSName
-      UserData:
-        Fn::Base64:
-          Fn::Join:
-            - ''
-            - - "<powershell>\n"
-              - "# Set required environment variables\n"
-              - !Sub "$env:COMPUTERNAME = '${AdcaServerNetBIOSName}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_USER = '${DomainAdminUser}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_PASSWORD = '${DomainAdminPassword}'\n"
-              - !Sub "$env:DOMAIN_DNS_NAME = '${DomainDNSName}'\n"
-              - !Sub "$env:DOMAIN_NETBIOS_NAME = '${DomainNetBIOSName}'\n"
-              - !Sub "$env:CA_KEY_LENGTH = '${CaKeyLength}'\n"
-              - !Sub "$env:CA_HASH_ALGORITHM = '${CaHashAlgorithm}'\n"
-              - !Sub "$env:CA_VALIDITY_PERIOD = '${CaValidityPeriodUnits}'\n"
-              - !Sub "$env:OU_NAME = '${OrganizationalUnitName}'\n"
-              - !Sub "$env:ENABLE_ADVANCED_AUDITING = '${EnableAdvancedAuditing}'\n"
-              - "\n"
-              - "# Create required directories\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\scripts'\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\log'\n"
-              - "\n"
-              - "# Initialize CFN\n"
-              - !Sub "cfn-init.exe -v --stack ${AWS::StackName} --resource RootCAInstance --configsets default --region ${AWS::Region}\n"
-              - "</powershell>\n"
-  SubCAInstance:
-    Type: AWS::EC2::Instance
-    DependsOn: RootCAWaitCondition
-    Metadata:
-      AWS::CloudFormation::Init:
-        configSets:
-          default:
-            - setup
-            - join
-            - configure
-        setup:
-          files:
-            'C:\cfn\scripts\Initialize-SubCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Initialize-SubCA.ps1
-            'C:\cfn\scripts\Join-Domain.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Join-Domain.ps1
-            'C:\cfn\scripts\Configure-SubCA.ps1':
-              source: !Sub https://${AssetsBucket}.s3.${QSS3BucketRegion}.amazonaws.com/${AssetsPrefix}scripts/Configure-SubCA.ps1
-          commands:
-            1-initialize-ca:
-              command: powershell -Command "C:\cfn\scripts\Initialize-SubCA.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        join:
-          commands:
-            1-join-domain:
-              command: powershell -Command "C:\cfn\scripts\Join-Domain.ps1"
-              waitAfterCompletion: 0
-            2-restart-computer:
-              command: powershell -Command "Restart-Computer -Force"
-              waitAfterCompletion: forever
-        configure:
-          commands:
-            1-configure-ca:
-              command: powershell -Command "C:\cfn\scripts\Configure-SubCA.ps1"
-              waitAfterCompletion: 0
-            2-signal-success:
-              command: !Sub cfn-signal.exe -e %ERRORLEVEL% --stack ${AWS::StackName} --resource SubCAWaitCondition --region ${AWS::Region}
-              waitAfterCompletion: 0
-    Properties:
-      ImageId: !FindInMap 
-        - AWSAMIRegionMap
-        - !Ref AWS::Region
-        - WS2022FULLBASE
-      InstanceType: !Ref SubcaInstanceType
-      SubnetId: !Ref SubnetID
-      IamInstanceProfile: !Ref SubCAInstanceProfile
-      SecurityGroupIds: 
-        - !Ref SubCASecurityGroup
-        - !Ref DomainMemberSGID
-      Tags:
-        - Key: Name
-          Value: !Ref SubcaServerNetBIOSName
-      UserData:
-        Fn::Base64:
-          Fn::Join:
-            - ''
-            - - "<powershell>\n"
-              - "# Set required environment variables\n"
-              - !Sub "$env:COMPUTERNAME = '${SubcaServerNetBIOSName}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_USER = '${DomainAdminUser}'\n"
-              - !Sub "$env:DOMAIN_ADMIN_PASSWORD = '${DomainAdminPassword}'\n"
-              - !Sub "$env:DOMAIN_DNS_NAME = '${DomainDNSName}'\n"
-              - !Sub "$env:DOMAIN_NETBIOS_NAME = '${DomainNetBIOSName}'\n"
-              - !Sub "$env:ROOT_CA_NAME = '${AdcaServerNetBIOSName}'\n"
-              - !Sub "$env:CA_KEY_LENGTH = '${CaKeyLength}'\n"
-              - !Sub "$env:CA_HASH_ALGORITHM = '${CaHashAlgorithm}'\n"
-              - !Sub "$env:CA_VALIDITY_PERIOD = '${CaValidityPeriodUnits}'\n"
-              - !Sub "$env:OU_NAME = '${OrganizationalUnitName}'\n"
-              - !Sub "$env:ENABLE_ADVANCED_AUDITING = '${EnableAdvancedAuditing}'\n"
-              - "\n"
-              - "# Create required directories\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\scripts'\n"
-              - "New-Item -ItemType Directory -Force -Path 'C:\\cfn\\log'\n"
-              - "\n"
-              - "# Initialize CFN\n"
-              - !Sub "cfn-init.exe -v --stack ${AWS::StackName} --resource SubCAInstance --configsets default --region ${AWS::Region}\n"
-              - "</powershell>\n"
+  WaitForSubCA2Handle:
+    Type: AWS::CloudFormation::WaitConditionHandle
 
 Outputs:
-  RootCAInstanceId:
-    Description: Root CA Instance ID
-    Value: !Ref RootCAInstance
+  OfflineRootCAInstanceId:
+    Description: Instance ID of the Offline Root CA
+    Value: !Ref OfflineRootCA
 
-  RootCAPrivateIP:
-    Description: Root CA Private IP Address
-    Value: !GetAtt RootCAInstance.PrivateIp
+  SubCA1InstanceId:
+    Description: Instance ID of the first Subordinate CA
+    Value: !Ref SubCA1
 
-  SubCAInstanceId:
-    Description: Subordinate CA Instance ID
-    Value: !Ref SubCAInstance
+  SubCA2InstanceId:
+    Description: Instance ID of the second Subordinate CA
+    Value: !Ref SubCA2
 
-  SubCAPrivateIP:
-    Description: Subordinate CA Private IP Address
-    Value: !GetAtt SubCAInstance.PrivateIp
+  PKISecurityGroupID:
+    Description: Security Group ID for PKI servers
+    Value: !Ref PKISecurityGroup
 
-  DomainAdmin:
-    Description: Domain administrator account
-    Value: !Sub ${DomainNetBIOSName}\${DomainAdminUser}
+  OfflineRootCARole:
+    Description: IAM Role for Offline Root CA
+    Value: !Ref OfflineRootCARole
 
-  RootCASecurityGroupID:
-    Description: Root CA Security Group ID
-    Value: !Ref RootCASecurityGroup
+  SubordinateCARole:
+    Description: IAM Role for Subordinate CAs
+    Value: !Ref SubordinateCARole
 
-  SubCASecurityGroupID:
-    Description: Subordinate CA Security Group ID
-    Value: !Ref SubCASecurityGroup
+  ConfigureORCASsmDocument:
+    Description: SSM Document for configuring Offline Root CA
+    Value: !Ref ConfigureORCASsm
+
+  ConfigureSubCASsmDocument:
+    Description: SSM Document for configuring Subordinate CAs
+    Value: !Ref ConfigureSubCASsm
+
+  S3CRLBucketName:
+    Condition: UseS3CRL
+    Description: S3 bucket name for CRL distribution
+    Value: !Ref S3CRLBucketName
+
+  DomainDNSName:
+    Description: Domain DNS Name
+    Value: !Ref DomainDNSName
+
+  OrCANetBIOSName:
+    Description: NetBIOS Name of Offline Root CA
+    Value: !Ref OrCANetBIOSName
+
+  SubCA1NetBIOSName:
+    Description: NetBIOS Name of first Subordinate CA
+    Value: !Ref SubCA1NetBIOSName
+
+  SubCA2NetBIOSName:
+    Description: NetBIOS Name of second Subordinate CA
+    Value: !Ref SubCA2NetBIOSName
