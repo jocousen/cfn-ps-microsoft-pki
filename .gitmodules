@@ -1,7 +1,7 @@
 [submodule "docs/boilerplate"]
 	path = docs/boilerplate
-	url = https://github.com/jocousen/aws-ia-documentation-base-common-offline.git
+	url = https://github.com/jocousen/aws-ia-documentation-base-common-offline-offline.git
 [submodule "submodules/cfn-ps-microsoft-utilities"]
 	path = submodules/cfn-ps-microsoft-utilities
-	url = https://github.com/jocousen/cfn-ps-microsoft-utilities-offline.git
+	url = https://github.com/jocousen/cfn-ps-microsoft-utilities-offline-offline.git
 	branch = main
