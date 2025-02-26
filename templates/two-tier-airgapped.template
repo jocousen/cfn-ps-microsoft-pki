@@ -605,15 +605,18 @@ Resources:
                 $Modules = @(
                     @{
                         Name    = 'NetworkingDsc'
-                        Version = '8.2.0'
+                        Version = '9.0.0'
+                        Path = 'downloads/modules/networkingdsc.9.0.0.nupkg'
                     },
                     @{
                         Name    = 'ComputerManagementDsc'
-                        Version = '8.5.0'
+                        Version = '10.0.0'
+                        Path = 'downloads/modules/computermanagementdsc.10.0.0.nupkg'
                     },
                     @{
                         Name = 'AuditPolicyDsc'
                         Version = '1.4.0.0'
+                        Path = 'downloads/modules/auditpolicydsc.1.4.0.nupkg'
                     }
                 )
 
@@ -636,31 +639,38 @@ Resources:
                     }
                 }
 
-                Write-Output 'Installing NuGet Package Provider'
-                Try {
-                    $Null = Install-PackageProvider -Name 'NuGet' -MinimumVersion '2.8.5' -Force -ErrorAction Stop
-                } Catch [System.Exception] {
-                    Write-Output "Failed to install NuGet Package Provider $_"
-                    Exit 1
-                }
-
-                Write-Output 'Setting PSGallery Respository to trusted'
-                Try {
-                    Set-PSRepository -Name 'PSGallery' -InstallationPolicy 'Trusted' -ErrorAction Stop
-                } Catch [System.Exception] {
-                    Write-Output "Failed to set PSGallery Respository to trusted $_"
-                    Exit 1
-                }
-
-                Write-Output 'Installing the needed Powershell DSC modules for this Quick Start'
+                Write-Output 'Installing PowerShell DSC Modules from downloads folder'
                 Foreach ($Module in $Modules) {
                     Try {
-                        Install-Module -Name $Module.Name -RequiredVersion $Module.Version -ErrorAction Stop
+                        $ModulePath = "$S3BucketName/($Module.Path)"
+                        $LocalPath = "C:\AWSQuickstart\$($Module.Name).nupkg"
+                        $ModuleDestination = "C:\Program Files\WindowsPowerShell\Modules\$($Module.Name)\$($Module.Version)"
+                
+                        Read-S3Object -BucketName $S3BucketName -Key $ModulePath -File $LocalPath -Region $S3BucketRegion
+                
+                        # Extract directly to module destination
+                        $null = New-Item -Path $ModuleDestination -ItemType Directory -Force
+                        Rename-Item -Path $LocalPath -NewName "$($Module.Name).zip" -Force
+                        Expand-Archive -Path "C:\AWSQuickstart\$($Module.Name).zip" -DestinationPath $ModuleDestination -Force
+                
+                        # Cleanup
+                        Remove-Item -Path "C:\AWSQuickstart\$($Module.Name).zip" -Force
+                
                     } Catch [System.Exception] {
-                        Write-Output "Failed to Import Modules $_"
+                        Write-Output "Failed to install module $($Module.Name): $_"
                         Exit 1
                     }
-                } 
+                }
+                
+                # Verify modules are registered
+                Write-Output 'Verifying DSC Module Installation'
+                foreach ($Module in $Modules) {
+                    if (Get-Module -ListAvailable -Name $Module.Name | Where-Object { $_.Version -eq $Module.Version }) {
+                        Write-Output "$($Module.Name) v$($Module.Version) installed successfully."
+                    } else {
+                        Write-Output "$($Module.Name) v$($Module.Version) is NOT installed."
+                    }
+                }
             CloudWatchOutputConfig:
               CloudWatchOutputEnabled: true
               CloudWatchLogGroupName: !Sub '/aws/Quick_Start/${AWS::StackName}'
@@ -1023,17 +1033,17 @@ Resources:
           Description: Certificate Enrollment
           FromPort: 135
           ToPort: 135
-          CidrIp: !Ref VPCCIDR
+          CidrIp: 10.0.0.0/8
         - IpProtocol: tcp
           Description: RDP
           FromPort: 3389
           ToPort: 3389
-          SourceSecurityGroupId: !Ref DomainMembersSG
+          CidrIp: 10.0.0.0/8
         - IpProtocol: tcp
           Description: Random RPC
           FromPort: 49152
           ToPort: 65535
-          CidrIp: !Ref VPCCIDR
+          CidrIp: 10.0.0.0/8
       Tags:
         - Key: Name
           Value: CertificateAuthoritySecurityGroup
